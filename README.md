@@ -2,6 +2,8 @@
 
 A powerful browser extension that lives in your sidebar and automates repetitive tasks: click buttons at intervals, capture and fill forms, and record & replay action sequences.
 
+![Mazilla Screenshot](/mazilla.jpg)
+
 ## Features
 
 ### ⚡ Autoclick
