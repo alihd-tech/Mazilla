@@ -1,6 +1,4 @@
-// ===========================
 //  Mazilla — Content Script
-// ===========================
 
 (function () {
   'use strict';
@@ -77,19 +75,15 @@
 
   injectStyles();
 
-  // ── Build a unique CSS selector for an element ─────────────────────────────
   function buildSelector(el) {
-    // Check for existing mazilla id
     if (el.getAttribute(MAZILLA_ATTR)) {
       return `[${MAZILLA_ATTR}="${el.getAttribute(MAZILLA_ATTR)}"]`;
     }
 
-    // Try id
     if (el.id && /^[a-zA-Z]/.test(el.id)) {
       return '#' + CSS.escape(el.id);
     }
 
-    // Build path
     const parts = [];
     let current = el;
     while (current && current !== document.body) {
@@ -99,7 +93,6 @@
         parts.unshift(seg);
         break;
       }
-      // use nth-of-type for uniqueness
       const siblings = Array.from(current.parentElement?.children || []).filter(
         (c) => c.tagName === current.tagName
       );
@@ -113,7 +106,6 @@
     return parts.join(' > ');
   }
 
-  // ── Get a human-readable label ─────────────────────────────────────────────
   function getLabel(el) {
     return (
       el.getAttribute('aria-label') ||
@@ -123,7 +115,6 @@
     );
   }
 
-  // ── Overlay management ─────────────────────────────────────────────────────
   function createOverlay() {
     overlay = document.createElement('div');
     overlay.className = 'mazilla-hover-overlay';
@@ -161,7 +152,6 @@
     if (banner) { banner.remove(); banner = null; }
   }
 
-  // ── Mouse handlers ─────────────────────────────────────────────────────────
   function onMouseMove(e) {
     if (!isPicking) return;
     const el = e.target;
@@ -179,7 +169,6 @@
     const el = hoveredEl || e.target;
     if (!el || el === overlay || el === banner) return;
 
-    // Assign a stable mazilla id
     const mazillaId = 'mz-' + Math.random().toString(36).slice(2, 8);
     el.setAttribute(MAZILLA_ATTR, mazillaId);
 
@@ -188,7 +177,6 @@
 
     stopPicking();
 
-    // Report back to sidebar
     chrome.runtime.sendMessage({
       type: 'MAZILLA_ELEMENT_PICKED',
       selector,
@@ -204,7 +192,6 @@
     }
   }
 
-  // ── Pick mode ──────────────────────────────────────────────────────────────
   function startPicking() {
     isPicking = true;
     document.body.classList.add(PICKING_CLASS);
@@ -244,7 +231,6 @@
     }
   }
 
-  // ── Form capture ───────────────────────────────────────────────────────────
   function captureForm() {
     const forms = document.querySelectorAll('form');
     if (forms.length === 0) {
@@ -274,7 +260,6 @@
     });
   }
 
-  // ── Form filling ───────────────────────────────────────────────────────────
   function fillForm(formData) {
     let filledCount = 0;
     formData.fields.forEach((field) => {
@@ -298,7 +283,6 @@
     });
   }
 
-  // ── Macro recording ───────────────────────────────────────────────────────
   let isRecording = false;
   const recordedClicks = [];
 
@@ -336,7 +320,6 @@
     });
   }
 
-  // ── Macro playback ─────────────────────────────────────────────────────────
   function playMacro(macro) {
     let clickCount = 0;
     let index = 0;
@@ -372,7 +355,6 @@
     executeNext();
   }
 
-  // ── Message listener ───────────────────────────────────────────────────────
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     switch (msg.type) {
       case 'MAZILLA_START_PICK':
@@ -385,13 +367,11 @@
         doClick(msg.selector);
         break;
       case 'MAZILLA_CLEAR_TARGET':
-        // Remove all mazilla id attributes
         document.querySelectorAll('[' + MAZILLA_ATTR + ']').forEach((el) => {
           el.removeAttribute(MAZILLA_ATTR);
         });
         break;
       case 'MAZILLA_LOAD_JOB':
-        // Highlight existing selector briefly
         try {
           const el = document.querySelector(msg.selector);
           if (el) {

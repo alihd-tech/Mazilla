@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Mazilla",
-  "version": "2.2.3",
+  "version": "1.2",
   "description": "Maziar Got Me shit on form automation for the browser",
   "icons": {
     "16": "icons/icon16.png",

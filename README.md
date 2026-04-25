@@ -1,8 +1,14 @@
-# Mazilla — Browser Extension for Automation
+# Mazilla — Browser Extension for Page & Form Automation
+
+![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?logo=javascript&logoColor=000)
+![Chrome](https://img.shields.io/badge/Chrome-4285F4?logo=googlechrome&logoColor=fff)
+
 
 A powerful browser extension that lives in your sidebar and automates repetitive tasks: click buttons at intervals, capture and fill forms, and record & replay action sequences.
 
-![Mazilla Screenshot](/mazilla.jpg)
+## Screenshot 
+![Autoclick Screenshot](./docs/body.jpeg)
+
 
 ## Features
 
@@ -36,13 +42,13 @@ Record sequences of clicks and actions, then replay them instantly across pages 
 ### From Source (Developer Mode)
 
 1. **Download the extension files**
-   - Navigate to `public/extension/` in the project directory
+   - Navigate to the project directory
 
 2. **Load as unpacked extension**
    - Open `chrome://extensions/` (or `edge://extensions/` for Edge)
    - Enable **Developer mode** (toggle in top-right)
    - Click **Load unpacked**
-   - Select the `public/extension/` folder
+   - Select the `{dir}/` folder
    - The Mazilla icon will appear in your toolbar
 
 3. **Open the sidebar**
@@ -181,4 +187,6 @@ For issues, feature requests, or contributions, visit the GitHub repository or c
 
 ---
 
-**Mazilla v1.0** — Automate your browser, one click at a time.
+![Mazilla Screenshot](./docs/footer.jpeg)
+
+**Mazilla v1.2** — Automate your browser, one click at a time.
