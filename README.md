@@ -1,14 +1,12 @@
-# Mazilla — Browser Extension for Page & Form Automation
+# Mazilla — Extension for Page & Form Automation
 
 ![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?logo=javascript&logoColor=000)
 ![Chrome](https://img.shields.io/badge/Chrome-4285F4?logo=googlechrome&logoColor=fff)
-
 
 A powerful browser extension that lives in your sidebar and automates repetitive tasks: click buttons at intervals, capture and fill forms, and record & replay action sequences.
 
 ## Screenshot 
 ![Autoclick Screenshot](./docs/body.jpeg)
-
 
 ## Features
 
