@@ -7,7 +7,7 @@ A powerful browser extension that lives in your sidebar and automates repetitive
 
 ## Screenshot 
 ![Autoclick Screenshot](./docs/body.jpeg)
-
+![Chrome Webstore link](https://chromewebstore.google.com/detail/mazilla/paofeihadlbigdaoggimkjfhlfacihbk)
 ## Features
 
 ### ⚡ Autoclick
