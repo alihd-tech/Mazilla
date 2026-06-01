@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Mazilla",
-  "version": "1.2",
-  "description": "Maziar Got Me shit on form automation for the browser",
+  "version": "1.3.2",
+  "description": "Page & Form Automation Assistant",
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
@@ -16,7 +16,8 @@
     "tabs"
   ],
   "host_permissions": [
-    "<all_urls>"
+    "https://*/*",
+    "http://*/*"
   ],
   "background": {
     "service_worker": "background.js",
@@ -24,7 +25,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
+      "matches": ["https://*/*", "http://*/*"],
       "js": ["content.js"],
       "run_at": "document_idle"
     }

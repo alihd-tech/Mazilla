@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -11,19 +11,18 @@
     <!-- Header -->
     <header class="header">
       <div class="logo">
-        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-          <rect width="20" height="20" rx="5" fill="#00C2A8"/>
-          <path d="M4 10 L8 6 L10 9 L13 5 L16 10" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-          <circle cx="10" cy="14" r="2" fill="white"/>
-        </svg>
+        <img src="icons/icon128.png" alt="Mazilla Logo" width="20" height="20" class="logo-image">
         <span class="logo-text">Mazilla</span>
-        <span class="badge">v1.2</span>
+        <span class="badge">v1.3</span>
       </div>
       <div class="header-actions">
-        <button class="icon-btn" id="settings-btn" title="Settings">
-          <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+        <button class="icon-btn" id="theme-btn" type="button" title="Switch to light theme" aria-label="Switch theme">
+          <svg class="theme-icon theme-icon-light" width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
             <path d="M7.5 4.5a3 3 0 100 6 3 3 0 000-6zM6 7.5a1.5 1.5 0 113 0 1.5 1.5 0 01-3 0z" fill="currentColor"/>
             <path d="M7.5 1a.75.75 0 01.75.75v.816a5.54 5.54 0 011.674.693l.577-.577a.75.75 0 011.06 1.06l-.576.578a5.54 5.54 0 01.693 1.674h.817a.75.75 0 010 1.5h-.817a5.54 5.54 0 01-.693 1.674l.576.577a.75.75 0 01-1.06 1.06l-.577-.576a5.54 5.54 0 01-1.674.693v.817a.75.75 0 01-1.5 0v-.817a5.54 5.54 0 01-1.674-.693l-.577.576a.75.75 0 01-1.06-1.06l.576-.577A5.54 5.54 0 012.566 8.31H1.75a.75.75 0 010-1.5h.816A5.54 5.54 0 013.26 5.136l-.576-.577a.75.75 0 011.06-1.06l.577.577A5.54 5.54 0 016 3.383V2.75A.75.75 0 017.5 1z" fill="currentColor"/>
+          </svg>
+          <svg class="theme-icon theme-icon-dark" width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
+            <path d="M7.25 1.5a5.75 5.75 0 100 11.5 5.75 5.75 0 000-11.5zm0 1.5a4.25 4.25 0 000 8.5V3z" fill="currentColor"/>
           </svg>
         </button>
       </div>
@@ -51,6 +50,13 @@
           <path d="M4 6.5L5.5 8L9 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
         Macros
+      </button>
+      <button class="tab-btn" data-tab="clipboard">
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+          <rect x="2.5" y="1.5" width="8" height="10" rx="1.2" stroke="currentColor" stroke-width="1.2" fill="none"/>
+          <rect x="4" y="0.5" width="5" height="2.5" rx="0.8" stroke="currentColor" stroke-width="1.2" fill="none"/>
+        </svg>
+        Clipboard
       </button>
     </nav>
 
@@ -241,6 +247,40 @@
           </div>
           <div id="forms-list" class="saved-list">
             <p class="empty-msg">No saved form templates yet. Capture a form to get started.</p>
+          </div>
+        </section>
+      </div>
+
+      <!-- CLIPBOARD TAB -->
+      <div class="tab-panel" id="tab-clipboard">
+        <section class="section">
+          <div class="section-header">
+            <h2 class="section-title">Add Value</h2>
+            <span class="section-hint">Save text to reuse in form fields</span>
+          </div>
+          <div class="clipboard-add-form">
+            <label class="field-label" for="clipboard-name-input">Label</label>
+            <input type="text" class="field-input" id="clipboard-name-input" placeholder="e.g. Email, Username" />
+            <label class="field-label" for="clipboard-value-input">Value</label>
+            <textarea class="field-input clipboard-value-input" id="clipboard-value-input" rows="3" placeholder="Text to insert into inputs"></textarea>
+            <button class="btn btn-primary clipboard-add-btn" id="clipboard-add-btn" type="button">
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+                <path d="M6.5 2v9M2 6.5h9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+              </svg>
+              Add to Clipboard
+            </button>
+          </div>
+        </section>
+
+        <div class="divider"></div>
+
+        <section class="section">
+          <div class="section-header">
+            <h2 class="section-title">Saved Values</h2>
+            <span class="section-hint" id="clipboard-hint">Focus a field on the page, then insert</span>
+          </div>
+          <div id="clipboard-list" class="saved-list">
+            <p class="empty-msg">No saved values yet. Add one above to get started.</p>
           </div>
         </section>
       </div>

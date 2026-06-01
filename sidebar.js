@@ -22,8 +22,10 @@
     elapsedTimer: null,
     savedForms: [],
     savedMacros: [],
+    savedClipboard: [],
     isRecording: false,
     recordedEvents: [],
+    labelFilters: { jobs: null, forms: null, macros: null },
   };
 
   // ── DOM refs ───────────────────────────────────────────────────────────────
@@ -60,6 +62,42 @@
   const macroEvents    = $('macro-events');
   const macrosList     = $('macros-list');
   const macrosHint     = $('macros-hint');
+  const clipboardNameInput  = $('clipboard-name-input');
+  const clipboardValueInput = $('clipboard-value-input');
+  const clipboardAddBtn     = $('clipboard-add-btn');
+  const clipboardList       = $('clipboard-list');
+  const clipboardHint         = $('clipboard-hint');
+  const themeBtn       = $('theme-btn');
+
+  // ── Theme ──────────────────────────────────────────────────────────────────
+  const THEME_STORAGE_KEY = 'mazilla_theme';
+
+  function applyTheme(theme) {
+    const resolved = theme === 'light' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', resolved);
+    if (themeBtn) {
+      themeBtn.title = resolved === 'dark' ? 'Switch to light theme' : 'Switch to dark theme';
+      themeBtn.setAttribute('aria-label', themeBtn.title);
+    }
+  }
+
+  function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme') || 'dark';
+    const next = current === 'dark' ? 'light' : 'dark';
+    applyTheme(next);
+    chrome.storage.local.set({ [THEME_STORAGE_KEY]: next });
+  }
+
+  function loadPersistedTheme() {
+    chrome.storage.local.get(THEME_STORAGE_KEY, (result) => {
+      applyTheme(result[THEME_STORAGE_KEY] || 'dark');
+    });
+  }
+
+  if (themeBtn) {
+    themeBtn.addEventListener('click', toggleTheme);
+  }
+  loadPersistedTheme();
 
   // ── Tab Navigation ─────────────────────────────────────────────────────────
   document.querySelectorAll('.tab-btn').forEach((btn) => {
@@ -306,6 +344,7 @@
       label: state.targetLabel,
       intervalMs: state.intervalMs,
       maxClicks: state.maxClicks,
+      labels: [],
     };
     state.savedJobs.push(job);
     persistJobs();
@@ -313,40 +352,64 @@
   });
 
   function renderJobs() {
+    state.savedJobs = normalizeSavedItems(state.savedJobs);
+    clearStaleLabelFilter('jobs', state.savedJobs);
     if (state.savedJobs.length === 0) {
       savedJobsList.innerHTML = '<p class="empty-msg">No saved jobs yet.</p>';
       return;
     }
-    savedJobsList.innerHTML = '';
-    state.savedJobs.forEach((job) => {
-      const div = document.createElement('div');
-      div.className = 'job-item';
-      div.innerHTML = `
-        <div class="job-info">
-          <div class="job-name">${escapeHtml(job.name)}</div>
-          <div class="job-meta">${escapeHtml(job.selector)} · every ${formatMs(job.intervalMs)}</div>
-        </div>
-        <div class="job-actions">
-          <button class="job-btn run-job" title="Load this job" data-id="${job.id}">
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-              <path d="M2.5 2L10 6L2.5 10V2Z" fill="currentColor"/>
-            </svg>
-          </button>
-          <button class="job-btn del-job" title="Delete" data-id="${job.id}">
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-              <path d="M2 2L10 10M10 2L2 10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
-            </svg>
-          </button>
-        </div>`;
-      savedJobsList.appendChild(div);
+    const filtered = filterByLabel(state.savedJobs, 'jobs');
+    const playIcon = `<svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+      <path d="M2.5 2L10 6L2.5 10V2Z" fill="currentColor"/>
+    </svg>`;
+    let html = renderLabelFilterBar('jobs', state.savedJobs);
+    if (filtered.length === 0) {
+      html += '<p class="empty-msg">No jobs match this label.</p>';
+    } else {
+      filtered.forEach((job) => {
+        ensureLabels(job);
+        html += buildSavedItemRow({
+          id: job.id,
+          name: job.name,
+          labels: job.labels,
+          meta: `${escapeHtml(job.selector)} · every ${formatMs(job.intervalMs)}`,
+          primaryBtnClass: 'run-job',
+          primaryBtnTitle: 'Load this job',
+          primaryIcon: playIcon,
+          deleteBtnClass: 'del-job',
+        });
+      });
+    }
+    savedJobsList.innerHTML = html;
+    bindLabelFilterBar(savedJobsList, 'jobs', renderJobs);
+    bindSavedItemActions(savedJobsList, {
+      primarySelector: '.run-job',
+      deleteSelector: '.del-job',
+      onPrimary: loadJob,
+      onRename: renameJob,
+      onLabels: editJobLabels,
+      onDelete: deleteJob,
     });
+  }
 
-    savedJobsList.querySelectorAll('.run-job').forEach((btn) => {
-      btn.addEventListener('click', () => loadJob(parseInt(btn.dataset.id, 10)));
-    });
-    savedJobsList.querySelectorAll('.del-job').forEach((btn) => {
-      btn.addEventListener('click', () => deleteJob(parseInt(btn.dataset.id, 10)));
-    });
+  function renameJob(id) {
+    const job = state.savedJobs.find((j) => j.id === id);
+    if (!job) return;
+    const name = promptRename(job.name, 'job');
+    if (!name) return;
+    job.name = name;
+    persistJobs();
+    renderJobs();
+  }
+
+  function editJobLabels(id) {
+    const job = state.savedJobs.find((j) => j.id === id);
+    if (!job) return;
+    const labels = promptEditLabels(ensureLabels(job).labels);
+    if (labels === null) return;
+    job.labels = labels;
+    persistJobs();
+    renderJobs();
   }
 
   function loadJob(id) {
@@ -387,7 +450,7 @@
   function loadPersistedJobs() {
     chrome.storage.local.get('mazilla_jobs', (result) => {
       if (result.mazilla_jobs) {
-        state.savedJobs = result.mazilla_jobs;
+        state.savedJobs = normalizeSavedItems(result.mazilla_jobs);
         renderJobs();
       }
     });
@@ -417,9 +480,10 @@
     if (msg.type === 'MAZILLA_FORM_CAPTURED') {
       const form = {
         id: Date.now(),
-        name: msg.formName || 'Form ' + state.savedForms.length,
+        name: msg.formName || 'Form ' + (state.savedForms.length + 1),
         url: msg.url,
         fields: msg.fields,
+        labels: [],
       };
       state.savedForms.push(form);
       persistForms();
@@ -440,6 +504,11 @@
     if (msg.type === 'MAZILLA_MACRO_PLAYED') {
       alert('Macro played! ' + msg.clickCount + ' click(s) executed.');
     }
+    if (msg.type === 'MAZILLA_CLIPBOARD_INSERTED') {
+      if (!msg.success) {
+        alert('Could not insert — click an input or textarea on the page first, then try again.');
+      }
+    }
   });
 
   // ── Helpers ────────────────────────────────────────────────────────────────
@@ -453,49 +522,202 @@
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
+  const ICON_EDIT = `<svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+    <path d="M8.2 1.8l2 2-6.5 6.5H2v-2L8.2 1.8z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
+  </svg>`;
+  const ICON_TAG = `<svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+    <path d="M2 6.3L5.9 2.5H8l2 2v2.1L5.4 11 2 7.6V6.3z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
+  </svg>`;
+
+  function ensureLabels(item) {
+    if (!Array.isArray(item.labels)) item.labels = [];
+    return item;
+  }
+
+  function normalizeSavedItems(items) {
+    return (items || []).map((item) => ensureLabels(item));
+  }
+
+  function parseLabelsInput(input) {
+    return [...new Set(
+      input.split(',').map((s) => s.trim()).filter(Boolean)
+    )];
+  }
+
+  function promptRename(currentName, itemKind) {
+    const name = prompt(`Rename ${itemKind}:`, currentName);
+    if (name === null) return null;
+    const trimmed = name.trim();
+    return trimmed || null;
+  }
+
+  function promptEditLabels(currentLabels) {
+    const input = prompt('Labels (comma-separated):', currentLabels.join(', '));
+    if (input === null) return null;
+    return parseLabelsInput(input);
+  }
+
+  function renderLabelChipsHtml(labels) {
+    if (!labels || labels.length === 0) return '';
+    return `<div class="job-labels">${labels
+      .map((l) => `<span class="label-chip">${escapeHtml(l)}</span>`)
+      .join('')}</div>`;
+  }
+
+  function collectUniqueLabels(items) {
+    const set = new Set();
+    items.forEach((item) => {
+      ensureLabels(item).labels.forEach((l) => set.add(l));
+    });
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }
+
+  function filterByLabel(items, filterKey) {
+    const active = state.labelFilters[filterKey];
+    if (!active) return items;
+    return items.filter((item) => ensureLabels(item).labels.includes(active));
+  }
+
+  function clearStaleLabelFilter(filterKey, items) {
+    const active = state.labelFilters[filterKey];
+    if (!active) return;
+    if (!collectUniqueLabels(items).includes(active)) {
+      state.labelFilters[filterKey] = null;
+    }
+  }
+
+  function renderLabelFilterBar(filterKey, items) {
+    const allLabels = collectUniqueLabels(items);
+    if (allLabels.length === 0) return '';
+    const active = state.labelFilters[filterKey];
+    let html = '<div class="label-filter-bar"><span class="label-filter-title">Labels</span>';
+    html += `<button type="button" class="label-filter-chip${active === null ? ' active' : ''}" data-filter-key="${filterKey}" data-filter-label="">All</button>`;
+    allLabels.forEach((label) => {
+      const isActive = active === label;
+      html += `<button type="button" class="label-filter-chip${isActive ? ' active' : ''}" data-filter-key="${filterKey}" data-filter-label="${escapeHtml(label)}">${escapeHtml(label)}</button>`;
+    });
+    html += '</div>';
+    return html;
+  }
+
+  function bindLabelFilterBar(container, filterKey, onFilterChange) {
+    container.querySelectorAll('.label-filter-chip').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const label = btn.dataset.filterLabel;
+        state.labelFilters[filterKey] = label === '' ? null : label;
+        onFilterChange();
+      });
+    });
+  }
+
+  function bindSavedItemActions(container, handlers) {
+    if (handlers.onPrimary) {
+      container.querySelectorAll(handlers.primarySelector).forEach((btn) => {
+        btn.addEventListener('click', () => handlers.onPrimary(parseInt(btn.dataset.id, 10)));
+      });
+    }
+    container.querySelectorAll('.rename-item').forEach((btn) => {
+      btn.addEventListener('click', () => handlers.onRename(parseInt(btn.dataset.id, 10)));
+    });
+    container.querySelectorAll('.label-item').forEach((btn) => {
+      btn.addEventListener('click', () => handlers.onLabels(parseInt(btn.dataset.id, 10)));
+    });
+    container.querySelectorAll(handlers.deleteSelector).forEach((btn) => {
+      btn.addEventListener('click', () => handlers.onDelete(parseInt(btn.dataset.id, 10)));
+    });
+  }
+
+  function buildSavedItemRow({ id, name, meta, labels, primaryBtnClass, primaryBtnTitle, primaryIcon, deleteBtnClass }) {
+    return `
+      <div class="job-item" data-id="${id}">
+        <div class="job-info">
+          <div class="job-name">${escapeHtml(name)}</div>
+          ${renderLabelChipsHtml(labels)}
+          <div class="job-meta">${meta}</div>
+        </div>
+        <div class="job-actions">
+          <button class="job-btn ${primaryBtnClass}" title="${primaryBtnTitle}" data-id="${id}">
+            ${primaryIcon}
+          </button>
+          <button class="job-btn rename-item" title="Rename" data-id="${id}">${ICON_EDIT}</button>
+          <button class="job-btn label-item" title="Edit labels" data-id="${id}">${ICON_TAG}</button>
+          <button class="job-btn ${deleteBtnClass}" title="Delete" data-id="${id}">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+              <path d="M2 2L10 10M10 2L2 10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+      </div>`;
+  }
+
   // ── FORMS FUNCTIONALITY ────────────────────────────────────────────────────
   captureFormBtn.addEventListener('click', () => {
     sendToContent({ type: 'MAZILLA_CAPTURE_FORM' });
   });
 
   function renderForms() {
+    state.savedForms = normalizeSavedItems(state.savedForms);
+    clearStaleLabelFilter('forms', state.savedForms);
     if (state.savedForms.length === 0) {
       formsList.innerHTML = '<p class="empty-msg">No saved form templates yet.</p>';
       formsHint.textContent = 'No forms captured yet';
       return;
     }
-    formsList.innerHTML = '';
     formsHint.textContent = `${state.savedForms.length} form(s) saved`;
-    state.savedForms.forEach((form) => {
-      const fieldCount = form.fields.length;
-      const div = document.createElement('div');
-      div.className = 'job-item';
-      div.innerHTML = `
-        <div class="job-info">
-          <div class="job-name">${escapeHtml(form.name)}</div>
-          <div class="job-meta">${fieldCount} field(s) · URL: ${escapeHtml(form.url.slice(0, 30))}</div>
-        </div>
-        <div class="job-actions">
-          <button class="job-btn fill-form" title="Fill this form on current page" data-id="${form.id}">
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-              <path d="M2.5 6L4.5 8L9.5 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </button>
-          <button class="job-btn del-form" title="Delete" data-id="${form.id}">
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-              <path d="M2 2L10 10M10 2L2 10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
-            </svg>
-          </button>
-        </div>`;
-      formsList.appendChild(div);
+    const filtered = filterByLabel(state.savedForms, 'forms');
+    const fillIcon = `<svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+      <path d="M2.5 6L4.5 8L9.5 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`;
+    let html = renderLabelFilterBar('forms', state.savedForms);
+    if (filtered.length === 0) {
+      html += '<p class="empty-msg">No forms match this label.</p>';
+    } else {
+      filtered.forEach((form) => {
+        ensureLabels(form);
+        const fieldCount = form.fields.length;
+        const urlSnippet = form.url.length > 30 ? form.url.slice(0, 30) + '…' : form.url;
+        html += buildSavedItemRow({
+          id: form.id,
+          name: form.name,
+          labels: form.labels,
+          meta: `${fieldCount} field(s) · ${escapeHtml(urlSnippet)}`,
+          primaryBtnClass: 'fill-form',
+          primaryBtnTitle: 'Fill this form on current page',
+          primaryIcon: fillIcon,
+          deleteBtnClass: 'del-form',
+        });
+      });
+    }
+    formsList.innerHTML = html;
+    bindLabelFilterBar(formsList, 'forms', renderForms);
+    bindSavedItemActions(formsList, {
+      primarySelector: '.fill-form',
+      deleteSelector: '.del-form',
+      onPrimary: fillForm,
+      onRename: renameForm,
+      onLabels: editFormLabels,
+      onDelete: deleteForm,
     });
+  }
 
-    formsList.querySelectorAll('.fill-form').forEach((btn) => {
-      btn.addEventListener('click', () => fillForm(parseInt(btn.dataset.id, 10)));
-    });
-    formsList.querySelectorAll('.del-form').forEach((btn) => {
-      btn.addEventListener('click', () => deleteForm(parseInt(btn.dataset.id, 10)));
-    });
+  function renameForm(id) {
+    const form = state.savedForms.find((f) => f.id === id);
+    if (!form) return;
+    const name = promptRename(form.name, 'form');
+    if (!name) return;
+    form.name = name;
+    persistForms();
+    renderForms();
+  }
+
+  function editFormLabels(id) {
+    const form = state.savedForms.find((f) => f.id === id);
+    if (!form) return;
+    const labels = promptEditLabels(ensureLabels(form).labels);
+    if (labels === null) return;
+    form.labels = labels;
+    persistForms();
+    renderForms();
   }
 
   function fillForm(id) {
@@ -517,8 +739,128 @@
   function loadPersistedForms() {
     chrome.storage.local.get('mazilla_forms', (result) => {
       if (result.mazilla_forms) {
-        state.savedForms = result.mazilla_forms;
+        state.savedForms = normalizeSavedItems(result.mazilla_forms);
         renderForms();
+      }
+    });
+  }
+
+  // ── CLIPBOARD FUNCTIONALITY ────────────────────────────────────────────────
+  const ICON_INSERT = `<svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+    <path d="M2 6h8M6 2v8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+  </svg>`;
+  const ICON_COPY = `<svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+    <rect x="4" y="4" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.2"/>
+    <path d="M3 8H2a1 1 0 01-1-1V2a1 1 0 011-1h5a1 1 0 011 1v1" stroke="currentColor" stroke-width="1.2"/>
+  </svg>`;
+
+  clipboardAddBtn.addEventListener('click', addClipboardItem);
+
+  function addClipboardItem() {
+    const name = clipboardNameInput.value.trim();
+    const value = clipboardValueInput.value;
+    if (!value) {
+      clipboardValueInput.focus();
+      return;
+    }
+    state.savedClipboard.push({
+      id: Date.now(),
+      name: name || 'Value ' + (state.savedClipboard.length + 1),
+      value,
+    });
+    clipboardNameInput.value = '';
+    clipboardValueInput.value = '';
+    persistClipboard();
+    renderClipboard();
+  }
+
+  function renderClipboard() {
+    if (state.savedClipboard.length === 0) {
+      clipboardList.innerHTML = '<p class="empty-msg">No saved values yet. Add one above to get started.</p>';
+      clipboardHint.textContent = 'Focus a field on the page, then insert';
+      return;
+    }
+    clipboardHint.textContent = `${state.savedClipboard.length} value(s) saved`;
+    let html = '';
+    state.savedClipboard.forEach((item) => {
+      const preview = item.value.length > 40 ? item.value.slice(0, 40) + '…' : item.value;
+      html += `
+        <div class="job-item clipboard-item" data-id="${item.id}">
+          <div class="job-info">
+            <div class="job-name">${escapeHtml(item.name)}</div>
+            <div class="job-meta clipboard-preview">${escapeHtml(preview)}</div>
+          </div>
+          <div class="job-actions">
+            <button class="job-btn insert-clipboard" title="Insert into focused field" data-id="${item.id}">
+              ${ICON_INSERT}
+            </button>
+            <button class="job-btn copy-clipboard" title="Copy to system clipboard" data-id="${item.id}">
+              ${ICON_COPY}
+            </button>
+            <button class="job-btn rename-clipboard" title="Rename" data-id="${item.id}">${ICON_EDIT}</button>
+            <button class="job-btn del-clipboard" title="Delete" data-id="${item.id}">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                <path d="M2 2L10 10M10 2L2 10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+              </svg>
+            </button>
+          </div>
+        </div>`;
+    });
+    clipboardList.innerHTML = html;
+
+    clipboardList.querySelectorAll('.insert-clipboard').forEach((btn) => {
+      btn.addEventListener('click', () => insertClipboardValue(parseInt(btn.dataset.id, 10)));
+    });
+    clipboardList.querySelectorAll('.copy-clipboard').forEach((btn) => {
+      btn.addEventListener('click', () => copyClipboardValue(parseInt(btn.dataset.id, 10)));
+    });
+    clipboardList.querySelectorAll('.rename-clipboard').forEach((btn) => {
+      btn.addEventListener('click', () => renameClipboardItem(parseInt(btn.dataset.id, 10)));
+    });
+    clipboardList.querySelectorAll('.del-clipboard').forEach((btn) => {
+      btn.addEventListener('click', () => deleteClipboardItem(parseInt(btn.dataset.id, 10)));
+    });
+  }
+
+  function insertClipboardValue(id) {
+    const item = state.savedClipboard.find((c) => c.id === id);
+    if (!item) return;
+    sendToContent({ type: 'MAZILLA_INSERT_CLIPBOARD', value: item.value });
+  }
+
+  function copyClipboardValue(id) {
+    const item = state.savedClipboard.find((c) => c.id === id);
+    if (!item) return;
+    navigator.clipboard.writeText(item.value).catch(() => {
+      alert('Could not copy to clipboard.');
+    });
+  }
+
+  function renameClipboardItem(id) {
+    const item = state.savedClipboard.find((c) => c.id === id);
+    if (!item) return;
+    const name = promptRename(item.name, 'value');
+    if (!name) return;
+    item.name = name;
+    persistClipboard();
+    renderClipboard();
+  }
+
+  function deleteClipboardItem(id) {
+    state.savedClipboard = state.savedClipboard.filter((c) => c.id !== id);
+    persistClipboard();
+    renderClipboard();
+  }
+
+  function persistClipboard() {
+    chrome.storage.local.set({ mazilla_clipboard: state.savedClipboard });
+  }
+
+  function loadPersistedClipboard() {
+    chrome.storage.local.get('mazilla_clipboard', (result) => {
+      if (result.mazilla_clipboard) {
+        state.savedClipboard = result.mazilla_clipboard;
+        renderClipboard();
       }
     });
   }
@@ -556,6 +898,7 @@
       name,
       events: state.recordedEvents,
       timestamp: new Date().toISOString(),
+      labels: [],
     };
     state.savedMacros.push(macro);
     persistMacros();
@@ -564,42 +907,63 @@
   }
 
   function renderMacros() {
+    state.savedMacros = normalizeSavedItems(state.savedMacros);
+    clearStaleLabelFilter('macros', state.savedMacros);
     if (state.savedMacros.length === 0) {
       macrosList.innerHTML = '<p class="empty-msg">No saved macros yet.</p>';
       macrosHint.textContent = 'No macros saved yet';
       return;
     }
-    macrosList.innerHTML = '';
     macrosHint.textContent = `${state.savedMacros.length} macro(s) saved`;
-    state.savedMacros.forEach((macro) => {
-      const div = document.createElement('div');
-      div.className = 'job-item';
-      div.innerHTML = `
-        <div class="job-info">
-          <div class="job-name">${escapeHtml(macro.name)}</div>
-          <div class="job-meta">${macro.events.length} event(s) · ${new Date(macro.timestamp).toLocaleDateString()}</div>
-        </div>
-        <div class="job-actions">
-          <button class="job-btn run-macro" title="Play this macro" data-id="${macro.id}">
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-              <path d="M3 2L10 6L3 10V2Z" fill="currentColor"/>
-            </svg>
-          </button>
-          <button class="job-btn del-macro" title="Delete" data-id="${macro.id}">
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-              <path d="M2 2L10 10M10 2L2 10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
-            </svg>
-          </button>
-        </div>`;
-      macrosList.appendChild(div);
+    const filtered = filterByLabel(state.savedMacros, 'macros');
+    const playIcon = `<svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+      <path d="M3 2L10 6L3 10V2Z" fill="currentColor"/>
+    </svg>`;
+    let html = renderLabelFilterBar('macros', state.savedMacros);
+    if (filtered.length === 0) {
+      html += '<p class="empty-msg">No macros match this label.</p>';
+    } else {
+      html += filtered.map((macro) => buildSavedItemRow({
+        id: macro.id,
+        name: macro.name,
+        labels: macro.labels,
+        meta: `${macro.events.length} event(s) · ${new Date(macro.timestamp).toLocaleDateString()}`,
+        primaryBtnClass: 'run-macro',
+        primaryBtnTitle: 'Play this macro',
+        primaryIcon: playIcon,
+        deleteBtnClass: 'del-macro',
+      })).join('');
+    }
+    macrosList.innerHTML = html;
+    bindLabelFilterBar(macrosList, 'macros', renderMacros);
+    bindSavedItemActions(macrosList, {
+      primarySelector: '.run-macro',
+      deleteSelector: '.del-macro',
+      onPrimary: playMacro,
+      onRename: renameMacro,
+      onLabels: editMacroLabels,
+      onDelete: deleteMacro,
     });
+  }
 
-    macrosList.querySelectorAll('.run-macro').forEach((btn) => {
-      btn.addEventListener('click', () => playMacro(parseInt(btn.dataset.id, 10)));
-    });
-    macrosList.querySelectorAll('.del-macro').forEach((btn) => {
-      btn.addEventListener('click', () => deleteMacro(parseInt(btn.dataset.id, 10)));
-    });
+  function renameMacro(id) {
+    const macro = state.savedMacros.find((m) => m.id === id);
+    if (!macro) return;
+    const name = promptRename(macro.name, 'macro');
+    if (!name) return;
+    macro.name = name;
+    persistMacros();
+    renderMacros();
+  }
+
+  function editMacroLabels(id) {
+    const macro = state.savedMacros.find((m) => m.id === id);
+    if (!macro) return;
+    const labels = promptEditLabels(ensureLabels(macro).labels);
+    if (labels === null) return;
+    macro.labels = labels;
+    persistMacros();
+    renderMacros();
   }
 
   function playMacro(id) {
@@ -621,7 +985,7 @@
   function loadPersistedMacros() {
     chrome.storage.local.get('mazilla_macros', (result) => {
       if (result.mazilla_macros) {
-        state.savedMacros = result.mazilla_macros;
+        state.savedMacros = normalizeSavedItems(result.mazilla_macros);
         renderMacros();
       }
     });
@@ -631,8 +995,10 @@
   loadPersistedJobs();
   loadPersistedForms();
   loadPersistedMacros();
+  loadPersistedClipboard();
   renderJobs();
   renderForms();
   renderMacros();
+  renderClipboard();
   stopBtn.disabled = true;
 })();

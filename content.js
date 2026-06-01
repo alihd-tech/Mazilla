@@ -260,6 +260,50 @@
     });
   }
 
+  function insertClipboardValue(value) {
+    const el = document.activeElement;
+    if (!el || el === document.body) {
+      chrome.runtime.sendMessage({ type: 'MAZILLA_CLIPBOARD_INSERTED', success: false });
+      return;
+    }
+
+    const tag = el.tagName ? el.tagName.toLowerCase() : '';
+
+    if (tag === 'input' || tag === 'textarea') {
+      if (el.disabled || el.readOnly) {
+        chrome.runtime.sendMessage({ type: 'MAZILLA_CLIPBOARD_INSERTED', success: false });
+        return;
+      }
+      const start = el.selectionStart;
+      const end = el.selectionEnd;
+      if (typeof start === 'number' && typeof end === 'number') {
+        const before = el.value.slice(0, start);
+        const after = el.value.slice(end);
+        el.value = before + value + after;
+        const pos = start + value.length;
+        el.setSelectionRange(pos, pos);
+      } else {
+        el.value = value;
+      }
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+      chrome.runtime.sendMessage({ type: 'MAZILLA_CLIPBOARD_INSERTED', success: true });
+      return;
+    }
+
+    if (el.isContentEditable) {
+      el.focus();
+      const inserted = document.execCommand('insertText', false, value);
+      if (inserted) {
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        chrome.runtime.sendMessage({ type: 'MAZILLA_CLIPBOARD_INSERTED', success: true });
+        return;
+      }
+    }
+
+    chrome.runtime.sendMessage({ type: 'MAZILLA_CLIPBOARD_INSERTED', success: false });
+  }
+
   function fillForm(formData) {
     let filledCount = 0;
     formData.fields.forEach((field) => {
@@ -396,6 +440,9 @@
         break;
       case 'MAZILLA_PLAY_MACRO':
         playMacro(msg.macro);
+        break;
+      case 'MAZILLA_INSERT_CLIPBOARD':
+        insertClipboardValue(msg.value);
         break;
     }
     sendResponse && sendResponse({ ok: true });
